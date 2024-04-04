@@ -198,6 +198,30 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}
 	}
 
+	if cr.Spec.ForProvider.RepositoryRules != nil {
+		ghRepositoryRules, _ := getRepositoryRules(ctx, c.github, cr.Spec.ForProvider.Org, name)
+		//fmt.Println("ghRepositoryRules", ghRepositoryRules)
+		//fmt.Println("XXXXXXXXX")
+		//
+		//crRepositoryRulesToConfig := getRepositoryRulesMapFromCr(cr.Spec.ForProvider.RepositoryRules)
+		//fmt.Println(crRepositoryRulesToConfig)
+		fmt.Println("YYYYYYYYY")
+		ghRepositoryRulesToConfig, err := getRepositoryRulesWithConfig(ctx, c.github, cr.Spec.ForProvider.Org, name, ghRepositoryRules)
+		fmt.Println(ghRepositoryRulesToConfig, err)
+		//if err != nil {
+		//	return managed.ExternalObservation{}, err
+		//}
+		//crRepositoryRulesToConfig := getRepositoryRulesMapFromCr(cr.Spec.ForProvider.RepositoryRules)
+		//ghRepositoryRulesToConfig, err := getRepositoryRulesWithConfig(ctx, c.github, cr.Spec.ForProvider.Org, name, ghRepositoryRules)
+		//if err != nil {
+		//	return managed.ExternalObservation{}, err
+		//}
+		//
+		//if !cmp.Equal(crRepositoryRulesToConfig, ghRepositoryRulesToConfig) {
+		//	return notUpToDate, nil
+		//}
+	}
+
 	archivedCr := pointer.BoolDeref(cr.Spec.ForProvider.Archived, false)
 	if archivedCr != *repo.Archived {
 		return notUpToDate, nil
@@ -976,6 +1000,209 @@ func handleBranchProtectionSignature(ctx context.Context, gh *ghclient.Client, o
 	}
 	return nil
 }
+
+// getRepositoryRules retrieves all the rules for a given GitHub repository.
+func getRepositoryRules(ctx context.Context, gh *ghclient.Client, org, repo string) ([]*github.Ruleset, error) {
+	opt := &github.ListOptions{PerPage: 100}
+	var allRules []*github.Ruleset
+
+	for {
+		rules, resp, err := gh.Repositories.GetAllRulesets(ctx, org, repo, true)
+		if err != nil {
+			return nil, err
+		}
+
+		allRules = append(allRules, rules...)
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+
+	return allRules, nil
+}
+
+// getRepositoryRulesMapFromCr generates a map from the RepositoryRules slice
+// in the Crossplane resource.
+func getRepositoryRulesMapFromCr(rules []v1alpha1.RepositoryRuleset) map[string]v1alpha1.RepositoryRuleset {
+	crRulesToConfig := make(map[string]v1alpha1.RepositoryRuleset, len(rules))
+
+	for i := range rules {
+		// Use a copy to avoid changing passed []v1alpha1.RepositoryRules
+		// This prevents the controller from changing the spec of the live CR
+		// It can also prevent infinite reconciliation loops when managing the resources with ArgoCD
+		orig := &rules[i]
+		rCopy := orig.DeepCopy()
+
+		// handle optional fields
+		rCopy.Target = util.StringDerefToPointer(rCopy.Target, "branch")
+
+		rConditions := rCopy.Conditions
+		if rConditions != nil && rConditions.RefName != nil {
+			if rConditions.RefName.Include != nil {
+				rConditions.RefName.Include = util.SortAndReturn(rConditions.RefName.Include)
+				println("rConditions.RefName.Include", rConditions.RefName.Include)
+			}
+			if rConditions.RefName.Exclude != nil {
+				rConditions.RefName.Exclude = util.SortAndReturn(rConditions.RefName.Exclude)
+				println("rConditions.RefName.Exclude", rConditions.RefName.Exclude)
+			}
+		}
+
+		rBActors := rCopy.BypassActors
+		if rBActors != nil {
+			if rBActors.ActorType != nil {
+				rBActors.ActorType = util.StringDerefToPointer(rBActors.ActorType, "OrganizationAdmin")
+			}
+			if rBActors.BypassMode != nil {
+				rBActors.BypassMode = util.StringDerefToPointer(rBActors.BypassMode, "always")
+			}
+			if rBActors.ActorId != nil {
+				rBActors.ActorId = util.Int64DerefToPointer(rBActors.ActorId, 1)
+			}
+		}
+		rRules := rCopy.Rules
+		if rRules != nil {
+			if rRules.Creation.Type != nil {
+				rRules.Creation.Type = util.StringDerefToPointer(rRules.Creation.Type, "creation")
+			}
+			if rRules.Deletion.Type != nil {
+				rRules.Deletion.Type = util.StringDerefToPointer(rRules.Deletion.Type, "deletion")
+			}
+			if rRules.Update.Type != nil && rRules.Update.Parameters != nil {
+				rRules.Update.Type = util.StringDerefToPointer(rRules.Update.Type, "update")
+				if rRules.Update.Parameters.UpdateAllowsFetchAndMerge != nil {
+					rRules.Update.Parameters.UpdateAllowsFetchAndMerge = util.BoolDerefToPointer(rRules.Update.Parameters.UpdateAllowsFetchAndMerge, false)
+				}
+			}
+			if rRules.RequiredLinearHistory.Type != nil {
+				rRules.RequiredLinearHistory.Type = util.StringDerefToPointer(rRules.RequiredLinearHistory.Type, "required_linear_history")
+			}
+			if rRules.RequiredDeployments.Type != nil && rRules.RequiredDeployments.Parameters != nil {
+				rRules.RequiredDeployments.Type = util.StringDerefToPointer(rRules.RequiredDeployments.Type, "required_deployments")
+				if rRules.RequiredDeployments.Parameters.RequiredDeploymentEnvironments != nil {
+					rRules.RequiredDeployments.Parameters.RequiredDeploymentEnvironments = util.SortAndReturn(rRules.RequiredDeployments.Parameters.RequiredDeploymentEnvironments)
+				}
+			}
+			if rRules.RequiredSignatures.Type != nil {
+				rRules.RequiredSignatures.Type = util.StringDerefToPointer(rRules.RequiredSignatures.Type, "required_signatures")
+			}
+			if rRules.NonFastForward.Type != nil {
+				rRules.NonFastForward.Type = util.StringDerefToPointer(rRules.NonFastForward.Type, "non_fast_forward")
+			}
+		}
+
+		crRulesToConfig[rCopy.Name] = *rCopy
+	}
+	return crRulesToConfig
+}
+
+// getRepositoryRulesWithConfig creates a map of RepositoryRules based on the
+// branch rules fetched from the GitHub API.
+func getRepositoryRulesWithConfig(ctx context.Context, gh *ghclient.Client, owner, repo string, ghRules []*github.Ruleset) (map[string]v1alpha1.RepositoryRuleset, error) {
+	rulesToConfig := make(map[string]v1alpha1.RepositoryRuleset, len(ghRules))
+
+	for _, rule := range ghRules {
+		rules, _, err := gh.Repositories.GetAllRulesets(ctx, owner, repo, true)
+		if err != nil {
+			return nil, err
+		}
+		ruleset := v1alpha1.RepositoryRuleset{
+			Target:      util.ToStringPtr(rule.GetTarget()),
+			Enforcement: &rule.Enforcement,
+			Name:        rule.Name,
+			Conditions:  util.ConvertConditions(rule.GetConditions()),
+			//	RequireLinearHistory:           util.ToBoolPtr(rule.RequireLinearHistory),
+			//	NoneFastForward:                util.ToBoolPtr(rule.NoneFastForwardCommits),
+			//	RestrictCreationToBypassActors: getUserTeamAppRestrictions(rule.RestrictedCreationActors),
+			//	RestrictDeletionToBypassActors: getUserTeamAppRestrictions(rule.RestrictedDeletionActors),
+			//	RestrictUpdateToBypassActors:   getUserTeamAppRestrictions(rule.RestrictedUpdateActors),
+			//	RequireSignatures:              util.ToBoolPtr(rule.RequireSignatures),
+			//	RequiredDeployments: &v1alpha1.RequiredDeployments{
+			//		Environments: rule.RequiredDeployments.Environments,
+			//	},
+			//	RequiredPullRequestReviews: getPullRequestReviewsConfig(rule.RequiredPullRequestReviews),
+			//	RequiredStatusChecks:       getStatusChecksConfig(rule.RequiredStatusChecks),
+			Rules
+
+		}
+		//fmt.Println("ZZZZZZZ")
+		//fmt.Println(rules, "ZZZZZZZ", rule, "ZZZZZZZ", err, "ZZZZZZZ", ruleset)
+	}
+
+	return rulesToConfig, nil
+}
+
+//
+//// getUserTeamAppRestrictions converts the GitHub API's restriction actors
+//// to the Crossplane RepositoryRules format.
+//func getUserTeamAppRestrictions(actors *github.RestrictedActors) *v1alpha1.RuleRestrictions {
+//	if actors == nil {
+//		return nil
+//	}
+//
+//	users := make([]string, 0, len(actors.Users))
+//	for _, user := range actors.Users {
+//		users = append(users, user.GetLogin())
+//	}
+//
+//	teams := make([]string, 0, len(actors.Teams))
+//	for _, team := range actors.Teams {
+//		teams = append(teams, team.GetSlug())
+//	}
+//
+//	apps := make([]string, 0, len(actors.Apps))
+//	for _, app := range actors.Apps {
+//		apps = append(apps, app.GetSlug())
+//	}
+//
+//	return &v1alpha1.RuleRestrictions{
+//		Users: users,
+//		Teams: teams,
+//		Apps:  apps,
+//	}
+//}
+//
+//// getPullRequestReviewsConfig converts the GitHub API's pull request review
+//// settings to the Crossplane RepositoryRules format.
+//func getPullRequestReviewsConfig(reviews *github.PullRequestReviewsEnforcementRequest) *v1alpha1.RequiredPullRequestReviews {
+//	if reviews == nil {
+//		return nil
+//	}
+//
+//	return &v1alpha1.RequiredPullRequestReviews{
+//		DismissStaleReviews:           reviews.DismissStaleReviews,
+//		RequireCodeOwnerReviews:       reviews.RequireCodeOwnerReviews,
+//		RequiredApprovingReviewCount:  reviews.RequiredApprovingReviewCount,
+//		RequireLastPushApproval:       util.ToBoolPtr(reviews.RequireLastPushApproval),
+//		RequireReviewThreadResolution: util.ToBoolPtr(reviews.RequireReviewThreadResolution),
+//		BypassPullRequestAllowances:   getUserTeamAppRestrictions(reviews.BytepassPullRequestAllowances),
+//		DismissalRestrictions:         getUserTeamAppRestrictions(reviews.DismissalRestrictions),
+//	}
+//}
+//
+//// getStatusChecksConfig converts the GitHub API's status check settings to
+//// the Crossplane RepositoryRules format.
+//func getStatusChecksConfig(checks *github.RequiredStatusChecks) *v1alpha1.RequiredStatusChecks {
+//	if checks == nil {
+//		return nil
+//	}
+//
+//	statusChecks := make([]*v1alpha1.RequiredStatusCheck, 0, len(checks.Checks))
+//	for _, check := range checks.Checks {
+//		statusChecks = append(statusChecks, &v1alpha1.RequiredStatusCheck{
+//			Context:       check.Context,
+//			AppID:         util.IntPtr(int(check.AppID)),
+//			IntegrationID: check.IntegrationID,
+//		})
+//	}
+//
+//	return &v1alpha1.RequiredStatusChecks{
+//		StrictRequiredStatusChecksPolicy: checks.Strict,
+//		Checks:                           statusChecks,
+//	}
+//}
 
 //nolint:gocyclo
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {

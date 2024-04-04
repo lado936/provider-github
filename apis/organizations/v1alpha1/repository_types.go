@@ -34,6 +34,8 @@ type RepositoryParameters struct {
 
 	BranchProtectionRules []BranchProtectionRule `json:"branchProtectionRules,omitempty"`
 
+	RepositoryRules []RepositoryRuleset `json:"repositoryRules,omitempty"`
+
 	// Creates a new repository using a repository template
 	CreateFromTemplate *TemplateRepo `json:"createFromTemplate,omitempty"`
 
@@ -290,6 +292,153 @@ type BranchProtectionRestrictions struct {
 	// Only apps allowed to push will be able to create new branches matching this rule.
 	// +optional
 	Apps []string `json:"apps,omitempty"`
+}
+
+type RepositoryRuleset struct {
+	Name string `json:"name"`
+
+	Enforcement *string `json:"enforcement,omitempty"`
+	// +optional
+	Target *string `json:"target,omitempty"`
+	// +optional
+	BypassActors *RulesetByPassActors `json:"bypassActors,omitempty"`
+	// +optional
+	Conditions *RulesetConditions `json:"conditions,omitempty"`
+	// +optional
+	Rules *Rules `json:"rules,omitempty"`
+}
+
+type RulesetByPassActors struct {
+	ActorId    *int64  `json:"actorId,omitempty"`
+	ActorType  *string `json:"actorType,omitempty"`
+	BypassMode *string `json:"bypassMode,omitempty"`
+}
+
+type RulesetConditions struct {
+	RefName        *RulesetRefName        `json:"refName,omitempty"`
+	RepositoryName *RulesetRepositoryName `json:"repositoryName,omitempty"`
+}
+
+type RulesetRepositoryName struct {
+	Include   []string `json:"include"`
+	Exclude   []string `json:"exclude"`
+	Protected *bool    `json:"protected,omitempty"`
+}
+
+type RulesetRefName struct {
+	Include []string `json:"include,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
+}
+
+type Rules struct {
+	Creation *RulesCreation `json:"creation,omitempty"`
+	Deletion *RulesDeletion `json:"deletion,omitempty"`
+	Update   *RulesUpdate   `json:"update,omitempty"`
+	// +optional
+	RequiredLinearHistory    *RulesRequiredLinearHistory    `json:"requiredLinearHistory,omitempty"`
+	RequiredDeployments      *RulesRequiredDeployments      `json:"requiredDeployments,omitempty"`
+	RequiredSignatures       *RulesRequiredSignatures       `json:"requiredSignatures,omitempty"`
+	PullRequest              *RulesPullRequest              `json:"pullRequest,omitempty"`
+	RequiredStatusChecks     *RulesRequiredStatusChecks     `json:"requiredStatusChecks,omitempty"`
+	NonFastForward           *RulesNonFastForward           `json:"nonFastForward,omitempty"`
+	CommitMessagePattern     *RulesCommitMessagePattern     `json:"commitMessagePattern,omitempty"`
+	CommitAuthorEmailPattern *RulesCommitAuthorEmailPattern `json:"commitAuthorEmailPattern,omitempty"`
+	BranchNamePattern        *RulesBranchNamePattern        `json:"branchNamePattern,omitempty"`
+	TagNamePattern           *RulesTagNamePattern           `json:"tagNamePattern,omitempty"`
+}
+
+type RulesCreation struct {
+	Type *string `json:"type,omitempty"`
+}
+type RulesDeletion struct {
+	Type *string `json:"type,omitempty"`
+}
+type RulesUpdate struct {
+	Type       *string                `json:"type,omitempty"`
+	Parameters *RulesUpdateParameters `json:"parameters,omitempty"`
+}
+type RulesUpdateParameters struct {
+	UpdateAllowsFetchAndMerge *bool `json:"updateAllowsFetchAndMerge,omitempty"`
+}
+type RulesRequiredLinearHistory struct {
+	// +optional
+	Type *string `json:"type,omitempty"`
+}
+type RulesRequiredSignatures struct {
+	Type *string `json:"type,omitempty"`
+}
+type RulesRequiredDeployments struct {
+	Type       *string                             `json:"type,omitempty"`
+	Parameters *RulesRequiredDeploymentsParameters `json:"parameters,omitempty"`
+}
+type RulesRequiredDeploymentsParameters struct {
+	RequiredDeploymentEnvironments []string `json:"requiredDeploymentEnvironments,omitempty"`
+}
+type RulesPullRequest struct {
+	Type       string                      `json:"type,omitempty"`
+	Parameters *RulesPullRequestParameters `json:"parameters,omitempty"`
+}
+type RulesPullRequestParameters struct {
+	DismissStaleReviewsOnPush      bool `json:"dismissStaleReviewsOnPush,omitempty"`
+	RequireCodeOwnerReview         bool `json:"requireCodeOwnerReview,omitempty"`
+	RequireLastPushApproval        bool `json:"requireLastPushApproval,omitempty"`
+	RequiredApprovingReviewCount   int  `json:"requiredApprovingReviewCount,omitempty"`
+	RequiredReviewThreadResolution bool `json:"requiredReviewThreadResolution,omitempty"`
+}
+type RulesRequiredStatusChecks struct {
+	Type       string                               `json:"type,omitempty"`
+	Parameters *RulesRequiredStatusChecksParameters `json:"parameters,omitempty"`
+}
+type RulesRequiredStatusChecksParameters struct {
+	RequiredStatusChecks             *RulesRequiredStatusChecksParametersRequiredStatusChecks `json:"requiredStatusChecks,omitempty"`
+	StrictRequiredStatusChecksPolicy bool                                                     `json:"strictRequiredStatusChecksPolicy,omitempty"`
+}
+type RulesRequiredStatusChecksParametersRequiredStatusChecks struct {
+	Contexts      []string `json:"contexts"`
+	IntegrationId *int64   `json:"integrationId,omitempty"`
+}
+type RulesNonFastForward struct {
+	Type *string `json:"type,omitempty"`
+}
+type RulesCommitMessagePattern struct {
+	Type       string                               `json:"type,omitempty"`
+	Parameters *RulesCommitMessagePatternParameters `json:"parameters,omitempty"`
+}
+type RulesCommitMessagePatternParameters struct {
+	Name     string `json:"name,omitempty"`
+	Negate   bool   `json:"negate,omitempty"`
+	Operator string `json:"operator,omitempty"`
+	Pattern  string `json:"pattern,omitempty"`
+}
+type RulesCommitAuthorEmailPattern struct {
+	Type       string                                   `json:"type,omitempty"`
+	Parameters *RulesCommitAuthorEmailPatternParameters `json:"parameters,omitempty"`
+}
+type RulesCommitAuthorEmailPatternParameters struct {
+	Name     string `json:"name,omitempty"`
+	Negate   bool   `json:"negate,omitempty"`
+	Operator string `json:"operator,omitempty"`
+	Pattern  string `json:"pattern,omitempty"`
+}
+type RulesBranchNamePattern struct {
+	Type       string                            `json:"type,omitempty"`
+	Parameters *RulesBranchNamePatternParameters `json:"parameters,omitempty"`
+}
+type RulesBranchNamePatternParameters struct {
+	Name     string `json:"name,omitempty"`
+	Negate   bool   `json:"negate,omitempty"`
+	Operator string `json:"operator,omitempty"`
+	Pattern  string `json:"pattern,omitempty"`
+}
+type RulesTagNamePattern struct {
+	Type       string                         `json:"type,omitempty"`
+	Parameters *RulesTagNamePatternParameters `json:"parameters,omitempty"`
+}
+type RulesTagNamePatternParameters struct {
+	Name     string `json:"name,omitempty"`
+	Negate   bool   `json:"negate,omitempty"`
+	Operator string `json:"operator,omitempty"`
+	Pattern  string `json:"pattern,omitempty"`
 }
 
 // TemplateRepo represents the configuration for creating a new repository from a template.

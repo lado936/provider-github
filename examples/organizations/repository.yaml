@@ -47,6 +47,43 @@ spec:
             - context: terraform_validate
             - context: deploy
               appId: 123456
+    repositoryRules:
+      - name: main-ruleset
+        target: branch/tag
+        conditions:
+          - refName:
+              include:
+                - main
+                - feature/*
+        bypassActors:
+          actor:
+            users:
+              - ci-user
+            teams:
+              - teamRef:
+                  name: sample-team
+        rules:
+          requireLinearHistory: true
+          noneFastForward: true
+          restrictCreationToBypassActors: true
+          restrictDeletionToBypassActors: true
+          restrictUpdateToBypassActors: true
+          requireSignatures: true
+          requiredDeployments:
+            environments:
+              - production
+          requiredPullRequestReviews:
+            dismissStaleReviews: true
+            requiredApprovingReviewCount: 1
+            requireCodeOwnerReviews: true
+            requireLastPushApproval: true
+            requireReviewThreadResolution: true
+          requiredStatusChecks:
+            strictRequiredStatusChecksPolicy: true
+            checks:
+              - context: terraform_validate
+              - context: deploy
+                integration_id: 123456
 ---
 apiVersion: organizations.github.crossplane.io/v1alpha1
 kind: Repository

@@ -17,6 +17,8 @@
 package util
 
 import (
+	"fmt"
+	"github.com/google/go-github/v58/github"
 	"reflect"
 	"sort"
 
@@ -184,11 +186,31 @@ func ToBoolPtr(b bool) *bool {
 	return &b
 }
 
+// ToStringPtr converts a string value to a pointer to a string value.
+func ToStringPtr(s string) *string {
+	return &s
+}
+
 // BoolDerefToPointer dereferences the pointer to bool 'ptr',
 // uses 'def' as a default if 'ptr' is nil, and returns a new pointer to the resulting bool.
 func BoolDerefToPointer(ptr *bool, def bool) *bool {
 	b := pointer.BoolDeref(ptr, def)
 	return &b
+}
+
+func StringDerefToPointer(ptr *string, def string) *string {
+	s := pointer.StringDeref(ptr, def)
+	return &s
+}
+
+func IntDerefToPointer(ptr *int, def int) *int {
+	i := pointer.IntDeref(ptr, def)
+	return &i
+}
+
+func Int64DerefToPointer(ptr *int64, def int64) *int64 {
+	i := pointer.Int64Deref(ptr, def)
+	return &i
 }
 
 // BoolToInt converts a boolean value to an integer
@@ -197,4 +219,28 @@ func BoolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+func (r *RepositoryRuleset) GetRule() *v1alpha1.Rules {
+	return &v1alpha1.Rules{}
+}
+
+func ConvertConditions(ghConditions *github.RulesetConditions) *v1alpha1.RulesetConditions {
+	fmt.Println("AAAAAAAAAAA")
+	fmt.Println(ghConditions)
+	if ghConditions == nil {
+		return nil
+	}
+
+	conditions := &v1alpha1.RulesetConditions{}
+	if ghConditions.RefName != nil {
+		conditions.RefName = &v1alpha1.RulesetRefName{
+			Include: ghConditions.RefName.Include,
+			Exclude: ghConditions.RefName.Exclude,
+		}
+	}
+
+	// Add conversions for other condition types if needed
+
+	return conditions
 }
